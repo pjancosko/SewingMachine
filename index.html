@@ -330,6 +330,19 @@
           }
 
           const dur = (self.clipDuration || 15) * 1000;
+
+          // Slow Y-axis rotation of the whole rig during the sewing animation.
+          // Half-speed: rotation takes 2x the animation duration to complete 360°.
+          // Head-on tilt (X=0) stays consistent so the silhouette stays clean.
+          rig.removeAttribute("animation__spin");
+          rig.setAttribute("animation__spin", {
+            property: "rotation",
+            from: "0 0 0",
+            to:   "0 360 0",
+            dur: dur * 2,
+            easing: "linear"
+          });
+
           const ringDelay = Math.max(dur - 2000, 1000);
           const tapDelay  = dur + 500;
 
@@ -338,12 +351,31 @@
 
           self.ringTimer = setTimeout(() => {
             window.MemoryEcho?.burst();
+
+            // Fade out the sewing machine as the memory rings pulse outward.
+            // Takes 1.8s to fully fade so it syncs visually with the ring expansion.
+            const meshes = getMeshes();
+            const fadeProxy = { v: 1 };
+            anime({
+              targets: fadeProxy, v: 0, duration: 1800, easing: "easeInOutQuad",
+              update: () => setOpacity(meshes, fadeProxy.v)
+            });
           }, ringDelay);
 
           self.tapTimer = setTimeout(() => {
             if (rig.getAttribute("visible")) {
-              triggered = false;
-              tapHint.classList.add("visible");
+              // Fade the GLB back in so user can tap to sew again
+              const meshes = getMeshes();
+              const fadeInProxy = { v: 0 };
+              anime({
+                targets: fadeInProxy, v: 1, duration: 1200, easing: "easeOutQuad",
+                update: () => setOpacity(meshes, fadeInProxy.v),
+                complete: () => {
+                  setOpacity(meshes, 1);
+                  triggered = false;
+                  tapHint.classList.add("visible");
+                }
+              });
             }
           }, tapDelay);
         };
@@ -387,6 +419,10 @@
           if (self.tapTimer)  { clearTimeout(self.tapTimer);  self.tapTimer  = null; }
           if (self.clips) { self.clips.forEach(a => a.stop()); }
           if (self.mixer) { self.mixer.timeScale = 1; }
+
+          // Stop the spin and reset rotation to starting angle
+          rig.removeAttribute("animation__spin");
+          rig.setAttribute("rotation", "0 0 0");
 
           if (rig.getAttribute("visible")) {
             const meshes = getMeshes();
@@ -471,7 +507,7 @@
       <a-entity light="type: point; intensity: 1.0; distance: 4; color: #FFF5E0" position="0 0.5 -1"></a-entity>
 
       <a-entity mindar-image-target="targetIndex: 0" sewing-ar>
-        <a-entity id="sewingRig" position="0 0.1 0" rotation="45 0 0" scale="7 7 7">
+        <a-entity id="sewingRig" position="0 0.1 0" rotation="0 0 0" scale="7 7 7">
           <a-gltf-model id="sewingModel" src="#sewingGLB" position="0 0 0" rotation="0 0 0"></a-gltf-model>
         </a-entity>
       </a-entity>
