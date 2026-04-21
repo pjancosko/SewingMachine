@@ -547,18 +547,72 @@
     </script>
 
     <script>
-    /* ── Splash ────────────────────────────────────────────────── */
+    /* ── Splash — iOS-compatible camera permission handling ─────── */
     (() => {
-      const splash=document.getElementById("splash"),sceneEl=document.querySelector("a-scene");
-      splash.addEventListener("click",()=>{
-        ["sewingAudio","snipAudio"].forEach(id=>{const a=document.getElementById(id);if(!a)return;const prev=a.muted;a.muted=true;a.play().then(()=>{a.pause();a.currentTime=0;a.muted=prev;}).catch(()=>{a.muted=prev;});});
-        const ka=document.createElement("audio");
-        ka.src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
-        ka.loop=true;ka.volume=0.001;document.body.appendChild(ka);ka.play().catch(()=>{});
-        const start=()=>{try{sceneEl.systems["mindar-image-system"].start();}catch(e){}};
-        if(sceneEl.hasLoaded)start();else sceneEl.addEventListener("loaded",start,{once:true});
-        splash.classList.add("fade-out");setTimeout(()=>{splash.remove();},1200);
-      },{once:true});
+      const splash  = document.getElementById("splash");
+      const sceneEl = document.querySelector("a-scene");
+
+      const unlockAudio = () => {
+        ["sewingAudio","snipAudio"].forEach(id => {
+          const a = document.getElementById(id);
+          if (!a) return;
+          const prev = a.muted;
+          a.muted = true;
+          a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = prev; })
+                  .catch(() => { a.muted = prev; });
+        });
+        const ka = document.createElement("audio");
+        ka.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+        ka.loop = true; ka.volume = 0.001;
+        document.body.appendChild(ka);
+        ka.play().catch(() => {});
+      };
+
+      const startMindAR = () => {
+        try { sceneEl.systems["mindar-image-system"].start(); }
+        catch (e) { console.warn("MindAR start error:", e); }
+      };
+
+      const handleSplashTap = async (e) => {
+        e.preventDefault();
+
+        // 1. Unlock audio (must be in user gesture)
+        unlockAudio();
+
+        // 2. iOS 13+ device orientation permission (if needed)
+        if (typeof DeviceOrientationEvent !== "undefined" &&
+            typeof DeviceOrientationEvent.requestPermission === "function") {
+          try { await DeviceOrientationEvent.requestPermission(); }
+          catch (err) { console.warn("Orientation permission:", err); }
+        }
+
+        // 3. REQUEST CAMERA PERMISSION EXPLICITLY — iOS Safari requires this
+        //    to happen inside the same user gesture that starts MindAR.
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+            audio: false
+          });
+          // Stop our test stream — MindAR will open its own
+          stream.getTracks().forEach(t => t.stop());
+        } catch (err) {
+          console.warn("Camera permission denied or unavailable:", err);
+          alert("Camera access is required for AR. Please allow camera in Safari settings and reload.");
+          return;
+        }
+
+        // 4. Start MindAR (which opens its own camera stream)
+        if (sceneEl.hasLoaded) startMindAR();
+        else sceneEl.addEventListener("loaded", startMindAR, { once: true });
+
+        // 5. Fade out splash
+        splash.classList.add("fade-out");
+        setTimeout(() => { splash.remove(); }, 1200);
+      };
+
+      // Use both touchend and click — iOS prefers touchend for gesture validation
+      splash.addEventListener("touchend", handleSplashTap, { once: true, passive: false });
+      splash.addEventListener("click",    handleSplashTap, { once: true });
     })();
     </script>
 
