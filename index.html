@@ -94,9 +94,6 @@
       }
 
       /* ── Scissor blade layers ─────────────────────────── */
-      /* The PNG has the actual blade art in a small region of a large
-         transparent canvas. We use small translate adjustments so the
-         two hinges end up overlapping at screen center. */
       .blade-layer {
         position: fixed;
         left: 50%; top: 50%;
@@ -106,13 +103,10 @@
         opacity: 0;
         will-change: transform, opacity;
       }
-      /* Stationary blade — hinge/screw point sits at ~70% across the PNG. */
       #blade-stationary {
         transform-origin: 70% center;
         transform: translate(-50%, -50%) scale(0);
       }
-      /* Moving blade — rotates around the scissor screw (~30% across the PNG),
-         not the handle. This keeps the two blade tips crossing correctly. */
       #blade-moving {
         transform-origin: 30% center;
         transform: translate(-50%, -50%) scale(0) rotate(0deg);
@@ -332,8 +326,6 @@
           const dur = (self.clipDuration || 15) * 1000;
 
           // Slow Y-axis rotation of the whole rig during the sewing animation.
-          // Half-speed: rotation takes 2x the animation duration to complete 360°.
-          // Head-on tilt (X=0) stays consistent so the silhouette stays clean.
           rig.removeAttribute("animation__spin");
           rig.setAttribute("animation__spin", {
             property: "rotation",
@@ -349,33 +341,16 @@
           if (self.ringTimer) clearTimeout(self.ringTimer);
           if (self.tapTimer)  clearTimeout(self.tapTimer);
 
+          // Memory ring burst — machine stays fully visible
           self.ringTimer = setTimeout(() => {
             window.MemoryEcho?.burst();
-
-            // Fade out the sewing machine as the memory rings pulse outward.
-            // Takes 1.8s to fully fade so it syncs visually with the ring expansion.
-            const meshes = getMeshes();
-            const fadeProxy = { v: 1 };
-            anime({
-              targets: fadeProxy, v: 0, duration: 1800, easing: "easeInOutQuad",
-              update: () => setOpacity(meshes, fadeProxy.v)
-            });
           }, ringDelay);
 
+          // Re-enable tapping for another sewing cycle
           self.tapTimer = setTimeout(() => {
             if (rig.getAttribute("visible")) {
-              // Fade the GLB back in so user can tap to sew again
-              const meshes = getMeshes();
-              const fadeInProxy = { v: 0 };
-              anime({
-                targets: fadeInProxy, v: 1, duration: 1200, easing: "easeOutQuad",
-                update: () => setOpacity(meshes, fadeInProxy.v),
-                complete: () => {
-                  setOpacity(meshes, 1);
-                  triggered = false;
-                  tapHint.classList.add("visible");
-                }
-              });
+              triggered = false;
+              tapHint.classList.add("visible");
             }
           }, tapDelay);
         };
@@ -420,7 +395,6 @@
           if (self.clips) { self.clips.forEach(a => a.stop()); }
           if (self.mixer) { self.mixer.timeScale = 1; }
 
-          // Stop the spin and reset rotation to starting angle
           rig.removeAttribute("animation__spin");
           rig.setAttribute("rotation", "0 0 0");
 
@@ -507,7 +481,8 @@
       <a-entity light="type: point; intensity: 1.0; distance: 4; color: #FFF5E0" position="0 0.5 -1"></a-entity>
 
       <a-entity mindar-image-target="targetIndex: 0" sewing-ar>
-        <a-entity id="sewingRig" position="0 0.1 0" rotation="0 0 0" scale="7 7 7">
+        <!-- Lowered Y position from 0.1 to -0.3 to drop the machine down on the marker -->
+        <a-entity id="sewingRig" position="0 -0.3 0" rotation="0 0 0" scale="7 7 7">
           <a-gltf-model id="sewingModel" src="#sewingGLB" position="0 0 0" rotation="0 0 0"></a-gltf-model>
         </a-entity>
       </a-entity>
@@ -612,24 +587,19 @@
       const handleSplashTap = async (e) => {
         e.preventDefault();
 
-        // 1. Unlock audio (must be in user gesture)
         unlockAudio();
 
-        // 2. iOS 13+ device orientation permission (if needed)
         if (typeof DeviceOrientationEvent !== "undefined" &&
             typeof DeviceOrientationEvent.requestPermission === "function") {
           try { await DeviceOrientationEvent.requestPermission(); }
           catch (err) { console.warn("Orientation permission:", err); }
         }
 
-        // 3. REQUEST CAMERA PERMISSION EXPLICITLY — iOS Safari requires this
-        //    to happen inside the same user gesture that starts MindAR.
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: "environment" },
             audio: false
           });
-          // Stop our test stream — MindAR will open its own
           stream.getTracks().forEach(t => t.stop());
         } catch (err) {
           console.warn("Camera permission denied or unavailable:", err);
@@ -637,16 +607,13 @@
           return;
         }
 
-        // 4. Start MindAR (which opens its own camera stream)
         if (sceneEl.hasLoaded) startMindAR();
         else sceneEl.addEventListener("loaded", startMindAR, { once: true });
 
-        // 5. Fade out splash
         splash.classList.add("fade-out");
         setTimeout(() => { splash.remove(); }, 1200);
       };
 
-      // Use both touchend and click — iOS prefers touchend for gesture validation
       splash.addEventListener("touchend", handleSplashTap, { once: true, passive: false });
       splash.addEventListener("click",    handleSplashTap, { once: true });
     })();
