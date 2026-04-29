@@ -93,6 +93,27 @@
         50%     { transform: translateX(-50%) scale(1.05); }
       }
 
+      /* ── Stay Hint ──────────────────────────────── */
+      #stayHint {
+        position: fixed;
+        left: 50%;
+        bottom: 32px;
+        transform: translateX(-50%);
+        padding: 7px 20px;
+        border-radius: 20px;
+        background: rgba(18, 14, 50, 0.55);
+        border: 1px solid rgba(100, 110, 200, 0.4);
+        color: rgba(200, 210, 255, 0.85);
+        font-family: Georgia, serif;
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        z-index: 1000001;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 1.4s ease;
+      }
+      #stayHint.visible { opacity: 1; }
+
       /* ── Scissor blade layers ─────────────────────────── */
       .blade-layer {
         position: fixed;
@@ -142,16 +163,17 @@
     <script>
     AFRAME.registerComponent("sewing-ar", {
       init() {
-        const self       = this;
-        const target     = this.el;
-        const rig        = target.querySelector("#sewingRig");
-        const modelEl    = target.querySelector("#sewingModel");
+        const self        = this;
+        const target      = this.el;
+        const rig         = target.querySelector("#sewingRig");
+        const modelEl     = target.querySelector("#sewingModel");
         const sewingAudio = document.querySelector("#sewingAudio");
         const snipAudio   = document.querySelector("#snipAudio");
-        const tapHint    = document.querySelector("#tapHint");
-        const scanText   = document.querySelector("#scanText");
-        const bladeStat  = document.getElementById("blade-stationary");
-        const bladeMove  = document.getElementById("blade-moving");
+        const tapHint     = document.querySelector("#tapHint");
+        const scanText    = document.querySelector("#scanText");
+        const stayHint    = document.querySelector("#stayHint");
+        const bladeStat   = document.getElementById("blade-stationary");
+        const bladeMove   = document.getElementById("blade-moving");
 
         let triggered  = false;
         let snipLoop   = null;
@@ -208,7 +230,6 @@
         // ── BLADES POP IN + SNIP SEQUENCE ───────────────────────
         const playSnipSequence = (onComplete) => {
 
-          // 1. Stationary blade pops in first
           anime({
             targets: bladeStat,
             opacity: [0, 1],
@@ -217,7 +238,6 @@
             easing: "easeOutElastic(1, 0.6)"
           });
 
-          // 2. Moving blade pops in slightly after
           anime({
             targets: bladeMove,
             opacity: [0, 1],
@@ -227,14 +247,12 @@
             easing: "easeOutElastic(1, 0.6)",
             complete: () => {
 
-              // 3. Start scissor audio
               if (snipAudio) {
                 snipAudio.currentTime = 0;
                 snipAudio.volume = 0.9;
                 snipAudio.play().catch(e => console.warn("Snip audio:", e));
               }
 
-              // 4. Snip animation — keyframes matched to audio rhythm
               snipAnim = anime({
                 targets: bladeMove,
                 keyframes: [
@@ -284,7 +302,7 @@
           });
         };
 
-        // ── SHOW GLB — called after scissors finish ──────────────
+        // ── SHOW GLB ────────────────────────────────────────────
         const showGLB = () => {
           const meshes = getMeshes();
           setOpacity(meshes, 0);
@@ -307,7 +325,7 @@
           });
         };
 
-        // ── TRIGGER SEWING — on tap ──────────────────────────────
+        // ── TRIGGER SEWING ──────────────────────────────────────
         const triggerSewing = () => {
           if (triggered) return;
           triggered = true;
@@ -325,7 +343,6 @@
 
           const dur = (self.clipDuration || 15) * 1000;
 
-          // Slow Y-axis rotation of the whole rig during the sewing animation.
           rig.removeAttribute("animation__spin");
           rig.setAttribute("animation__spin", {
             property: "rotation",
@@ -341,12 +358,10 @@
           if (self.ringTimer) clearTimeout(self.ringTimer);
           if (self.tapTimer)  clearTimeout(self.tapTimer);
 
-          // Memory ring burst — machine stays fully visible
           self.ringTimer = setTimeout(() => {
             window.MemoryEcho?.burst();
           }, ringDelay);
 
-          // Re-enable tapping for another sewing cycle
           self.tapTimer = setTimeout(() => {
             if (rig.getAttribute("visible")) {
               triggered = false;
@@ -359,6 +374,7 @@
         const show = () => {
           triggered = false;
           scanText.style.opacity = "0";
+          stayHint.classList.add("visible");
           window.MemoryFX?.start();
           resetBlades();
           playSnipSequence(() => showGLB());
@@ -368,6 +384,7 @@
         const hide = () => {
           window.MemoryFX?.stop();
           tapHint.classList.remove("visible");
+          stayHint.classList.remove("visible");
           triggered = false;
           resetBlades();
 
@@ -452,6 +469,7 @@
     <div id="scanFrame"></div>
     <div id="scanText">Point your camera at the marker</div>
     <div id="tapHint">🪡 Tap to Sew</div>
+    <div id="stayHint">⊹ keep marker in view ⊹</div>
 
     <!-- Scissor blade PNGs -->
     <img id="blade-stationary" class="blade-layer" src="stationaryblade.png" alt="" />
@@ -472,7 +490,6 @@
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- Bright lighting rig for AR visibility -->
       <a-entity light="type: ambient; intensity: 2.5; color: #FFF5E0"></a-entity>
       <a-entity light="type: hemisphere; intensity: 1.8; color: #FFFFFF; groundColor: #8B7355"></a-entity>
       <a-entity light="type: directional; intensity: 2.2; color: #FFFFFF" position="1 2 1"></a-entity>
@@ -481,7 +498,6 @@
       <a-entity light="type: point; intensity: 1.0; distance: 4; color: #FFF5E0" position="0 0.5 -1"></a-entity>
 
       <a-entity mindar-image-target="targetIndex: 0" sewing-ar>
-        <!-- Lowered Y position from 0.1 to -0.3 to drop the machine down on the marker -->
         <a-entity id="sewingRig" position="0 -0.3 0" rotation="0 0 0" scale="7 7 7">
           <a-gltf-model id="sewingModel" src="#sewingGLB" position="0 0 0" rotation="0 0 0"></a-gltf-model>
         </a-entity>
@@ -558,7 +574,7 @@
     </script>
 
     <script>
-    /* ── Splash — iOS-compatible camera permission handling ─────── */
+    /* ── Splash ─────────────────────────────────────────────────── */
     (() => {
       const splash  = document.getElementById("splash");
       const sceneEl = document.querySelector("a-scene");
@@ -586,7 +602,6 @@
 
       const handleSplashTap = async (e) => {
         e.preventDefault();
-
         unlockAudio();
 
         if (typeof DeviceOrientationEvent !== "undefined" &&
